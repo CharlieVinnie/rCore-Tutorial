@@ -14,9 +14,12 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use core::cell::RefMut;
+
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use crate::syscall::SyscallTrace;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -54,6 +57,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            task_trace: SyscallTrace::zero_init(),
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +139,12 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    fn get_current_task_trace(&self) -> RefMut<SyscallTrace> {
+        let inner = self.inner.exclusive_access();
+        RefMut::map(inner, |inner| {
+            &mut inner.tasks[inner.current_task].task_trace
+        })
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +178,9 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Get the current task's syscall trace
+pub fn get_current_task_trace() -> RefMut<'static, SyscallTrace> {
+    TASK_MANAGER.get_current_task_trace()
 }

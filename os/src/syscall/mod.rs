@@ -21,14 +21,43 @@ const SYSCALL_GET_TIME: usize = 169;
 /// trace syscall
 const SYSCALL_TRACE: usize = 410;
 
+const MAX_SYSCALL_ID: usize = 410;
+
 mod fs;
 mod process;
 
 use fs::*;
 use process::*;
 
+use crate::task::get_current_task_trace;
+
+#[derive(Copy, Clone)]
+/// The syscall trace of a task
+pub struct SyscallTrace {
+    /// The count of each syscall
+    pub counts: [usize; MAX_SYSCALL_ID + 1],
+}
+
+impl SyscallTrace {
+    /// Create a new zero-initialized syscall trace
+    pub fn zero_init() -> Self {
+        Self {
+            counts: [0; MAX_SYSCALL_ID + 1],
+        }
+    }
+    /// Add a syscall call to the trace
+    pub fn add_call(&mut self, syscall_id: usize) {
+        self.counts[syscall_id] += 1;
+    }
+    /// Get the count of a syscall
+    pub fn count(&self, syscall_id: usize) -> usize {
+        self.counts[syscall_id]
+    }
+}
+
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+    get_current_task_trace().add_call(syscall_id);
     match syscall_id {
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
