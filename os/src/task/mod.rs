@@ -14,7 +14,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use core::cell::{RefMut};
+
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::MemorySet;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -120,6 +123,12 @@ impl TaskManager {
         inner.tasks[inner.current_task].get_user_token()
     }
 
+    fn get_current_memory_set(&self) -> RefMut<MemorySet> {
+        RefMut::map(self.inner.exclusive_access(), |inner| {
+            inner.tasks[inner.current_task].get_memory_set()
+        })
+    }
+
     /// Get the current 'Running' task's trap contexts.
     fn get_current_trap_cx(&self) -> &'static mut TrapContext {
         let inner = self.inner.exclusive_access();
@@ -196,6 +205,10 @@ pub fn current_user_token() -> usize {
 /// Get the current 'Running' task's trap contexts.
 pub fn current_trap_cx() -> &'static mut TrapContext {
     TASK_MANAGER.get_current_trap_cx()
+}
+
+pub fn current_memory_set() -> RefMut<'static, MemorySet> {
+    TASK_MANAGER.get_current_memory_set()
 }
 
 /// Change the current 'Running' task's program break

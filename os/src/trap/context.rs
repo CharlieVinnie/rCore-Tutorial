@@ -17,6 +17,8 @@ pub struct TrapContext {
     pub kernel_sp: usize,
     /// Virtual address of trap handler entry point in kernel
     pub trap_handler: usize,
+    /// Traces count of each syscall
+    pub syscall_trace: [usize; crate::config::MAX_SYSCALL_NUM],
 }
 
 impl TrapContext {
@@ -42,6 +44,7 @@ impl TrapContext {
             kernel_satp,  // addr of page table
             kernel_sp,    // kernel stack
             trap_handler, // addr of trap_handler function
+            syscall_trace: [0; crate::config::MAX_SYSCALL_NUM],
         };
         cx.set_sp(sp); // app's user stack pointer
         cx // return initial Trap Context of app
