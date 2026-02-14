@@ -36,6 +36,10 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
     }
+    pub fn get_memory_set(&self) -> RefMut<MemorySet> {
+        let inner = self.inner_exclusive_access();
+        RefMut::map(inner, |inner| &mut inner.memory_set)
+    }
 }
 
 pub struct TaskControlBlockInner {
