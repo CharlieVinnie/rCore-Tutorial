@@ -8,7 +8,7 @@ use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
-
+use crate::task::priority::Priority;
 /// Task control block structure
 ///
 /// Directly save the contents that will not change during running
@@ -37,6 +37,17 @@ impl TaskControlBlock {
     pub fn get_memory_set(&self) -> RefMut<MemorySet> {
         let inner = self.inner_exclusive_access();
         RefMut::map(inner, |inner| &mut inner.memory_set)
+    }
+    /// Called each time the process is scheduled
+    pub fn schedule(&self) {
+        let mut inner = self.inner_exclusive_access();
+        inner.priority.step();
+    }
+    pub fn set_priority_level(&self, level: isize) -> Result<(), ()> {
+        let mut inner = self.inner_exclusive_access();
+        if level < 2 { return Err(()); }
+        inner.priority.set_level(level as usize);
+        Ok(())
     }
 }
 
@@ -72,6 +83,8 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    pub priority: Priority,
 }
 
 impl TaskControlBlockInner {
@@ -122,6 +135,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    priority: Priority::new(),
                 })
             },
         };
@@ -195,6 +209,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    priority: Priority::new(),
                 })
             },
         });
