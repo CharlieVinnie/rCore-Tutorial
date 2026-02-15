@@ -23,7 +23,17 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        let max_idx = self.ready_queue.iter().enumerate().max_by(
+            |(_, a), (_, b)| {
+                let a = a.inner_exclusive_access();
+                let b = b.inner_exclusive_access();
+                a.priority.cmp(&b.priority)
+            }
+        );
+        let max_idx = max_idx?.0;
+        let task = self.ready_queue.remove(max_idx)?;
+        task.schedule();
+        Some(task)
     }
 }
 

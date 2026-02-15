@@ -188,7 +188,7 @@ impl MemorySet {
                     MapPermission::R | MapPermission::W,
                 ),
                 None,
-            );
+            ).unwrap();
         }
         memory_set
     }
