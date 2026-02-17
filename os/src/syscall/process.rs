@@ -183,20 +183,21 @@ pub fn sys_spawn(path: *const u8) -> isize {
     );
     let token = current_user_token();
     let path = translated_str(token, path);
-    if let Some(data) = get_app_data_by_name(path.as_str()) {
-        let cur_task = current_task().unwrap();
-        let new_task = Arc::new(TaskControlBlock::new(data));
-        let mut cur_task_inner = cur_task.inner_exclusive_access();
-        let mut new_task_inner = new_task.inner_exclusive_access();
-        cur_task_inner.children.push(new_task.clone());
-        new_task_inner.parent = Some(Arc::downgrade(&cur_task));
-        drop(new_task_inner);
-        let pid = new_task.pid.0 as isize;
-        add_task(new_task);
-        pid
-    } else {
-        -1
-    }
+    let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) else {
+        return -1;
+    };
+    let data = app_inode.read_all();
+    let data = data.as_slice();
+    let cur_task = current_task().unwrap();
+    let new_task = Arc::new(TaskControlBlock::new(data));
+    let mut cur_task_inner = cur_task.inner_exclusive_access();
+    let mut new_task_inner = new_task.inner_exclusive_access();
+    cur_task_inner.children.push(new_task.clone());
+    new_task_inner.parent = Some(Arc::downgrade(&cur_task));
+    drop(new_task_inner);
+    let pid = new_task.pid.0 as isize;
+    add_task(new_task);
+    pid
 }
 
 // YOUR JOB: Set task priority.

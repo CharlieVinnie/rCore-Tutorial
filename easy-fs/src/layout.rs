@@ -1,12 +1,13 @@
 use super::{get_block_cache, BlockDevice, BLOCK_SZ};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use static_assertions::const_assert_eq;
 use core::fmt::{Debug, Formatter, Result};
 
 /// Magic number for sanity check
 const EFS_MAGIC: u32 = 0x3b800001;
 /// The max number of direct inodes
-const INODE_DIRECT_COUNT: usize = 28;
+const INODE_DIRECT_COUNT: usize = 27;
 /// The max length of inode name
 const NAME_LENGTH_LIMIT: usize = 27;
 /// The max number of indirect1 inodes
@@ -82,17 +83,21 @@ type DataBlock = [u8; BLOCK_SZ];
 #[repr(C)]
 pub struct DiskInode {
     pub size: u32,
+    pub references: u32,
     pub direct: [u32; INODE_DIRECT_COUNT],
     pub indirect1: u32,
     pub indirect2: u32,
     type_: DiskInodeType,
 }
 
+const_assert_eq!(core::mem::size_of::<DiskInode>(), 128);
+
 impl DiskInode {
     /// Initialize a disk inode, as well as all direct inodes under it
     /// indirect1 and indirect2 block are allocated only when they are needed
     pub fn initialize(&mut self, type_: DiskInodeType) {
         self.size = 0;
+        self.references = 1;
         self.direct.iter_mut().for_each(|v| *v = 0);
         self.indirect1 = 0;
         self.indirect2 = 0;
@@ -233,6 +238,21 @@ impl DiskInode {
                     }
                 }
             });
+    }
+    /// Decrease size to new_size
+    pub fn decrease_size(
+        &mut self,
+        new_size: u32,
+        block_device: &Arc<dyn BlockDevice>,
+    ) -> Vec<u32> {
+        let mut deallocated_blocks = Vec::new();
+        while self.data_blocks() > Self::_data_blocks(new_size) {
+            let block_id = self.get_block_id(self.data_blocks() - 1, block_device);
+            deallocated_blocks.push(block_id);
+            self.size = (self.data_blocks() - 1) * BLOCK_SZ as u32;
+        }
+        self.size = new_size;
+        deallocated_blocks
     }
 
     /// Clear size to zero and return blocks that should be deallocated.
@@ -394,6 +414,9 @@ pub struct DirEntry {
     name: [u8; NAME_LENGTH_LIMIT + 1],
     inode_id: u32,
 }
+
+const_assert_eq!(core::mem::size_of::<DirEntry>(), 32);
+
 /// Size of a directory entry
 pub const DIRENT_SZ: usize = 32;
 
