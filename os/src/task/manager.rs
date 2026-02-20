@@ -71,9 +71,13 @@ pub fn add_task(task: Arc<TaskControlBlock>) {
 /// Wake up a task
 pub fn wakeup_task(task: Arc<TaskControlBlock>) {
     trace!("kernel: TaskManager::wakeup_task");
-    let mut task_inner = task.inner_exclusive_access();
-    task_inner.task_status = TaskStatus::Ready;
-    drop(task_inner);
+    {
+        let mut task_inner = task.inner_exclusive_access();
+        task_inner.task_status = TaskStatus::Ready;
+        let inner = &mut *task_inner;
+        inner.mutex_locked.merge(&mut inner.mutex_requesting);
+        inner.semaphore_locked.merge(&mut inner.semaphore_requesting);
+    }
     add_task(task);
 }
 

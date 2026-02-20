@@ -7,7 +7,7 @@ use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
-use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
+use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell, ResourceBank, check_resource_deadlock};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -49,6 +49,8 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// enable deadlock detection?
+    pub deadlock_detection: bool,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +83,26 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+    /// Check for deadlocks
+    pub fn check_deadlock(&self) -> bool {
+        let mutex_bank = ResourceBank::new(
+            self.mutex_list
+                .iter()
+                .map(|mutex| mutex.as_ref().map(|m| (!m.is_locked()).into()).unwrap_or(0))
+                .collect()
+        );
+        let sem_bank = ResourceBank::new(
+            self.semaphore_list
+                .iter()
+                .map(|semaphore| semaphore.as_ref().map(|s| s.inner.exclusive_access().count.max(0)).unwrap_or(0))
+                .collect()
+        );
+        let tasks: Vec<_> = self.tasks.iter().flatten().map(|task| task.inner_exclusive_access()).collect();
+        let mutex_res_vector: Vec<_> = tasks.iter().map(|task| (&task.mutex_locked, &task.mutex_requesting)).collect();
+        let semaphore_res_vector: Vec<_> = tasks.iter().map(|task| (&task.semaphore_locked, &task.semaphore_requesting)).collect();
+        check_resource_deadlock(mutex_bank, mutex_res_vector) ||
+            check_resource_deadlock(sem_bank, semaphore_res_vector)
     }
 }
 
@@ -119,6 +141,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detection: false,
                 })
             },
         });
@@ -245,6 +268,7 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detection: parent.deadlock_detection,
                 })
             },
         });

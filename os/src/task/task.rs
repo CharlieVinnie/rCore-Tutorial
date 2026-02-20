@@ -2,6 +2,7 @@
 
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
+use crate::sync::Resources;
 use crate::trap::TrapContext;
 use crate::{mm::PhysPageNum, sync::UPSafeCell};
 use alloc::sync::{Arc, Weak};
@@ -41,6 +42,12 @@ pub struct TaskControlBlockInner {
     pub task_status: TaskStatus,
     /// It is set when active exit or execution error occurs
     pub exit_code: Option<i32>,
+
+    pub mutex_locked: Resources,
+    pub mutex_requesting: Resources,
+
+    pub semaphore_locked: Resources,
+    pub semaphore_requesting: Resources,
 }
 
 impl TaskControlBlockInner {
@@ -75,6 +82,10 @@ impl TaskControlBlock {
                     task_cx: TaskContext::goto_trap_return(kstack_top),
                     task_status: TaskStatus::Ready,
                     exit_code: None,
+                    mutex_locked: Resources::empty(),
+                    mutex_requesting: Resources::empty(),
+                    semaphore_locked: Resources::empty(),
+                    semaphore_requesting: Resources::empty(),
                 })
             },
         }
